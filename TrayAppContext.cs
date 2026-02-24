@@ -119,7 +119,7 @@ namespace TaskbarMediaControls
                 using var key = Registry.CurrentUser.CreateSubKey(RegistryRunKey);
                 if (key != null)
                 {
-                    string exePath = $"\"{Assembly.GetExecutingAssembly().Location}\"";
+                    string exePath = $"\"{Application.ExecutablePath}\""; // <-- Use this
                     if (enable)
                         key.SetValue(AppName, exePath);
                     else
