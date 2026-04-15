@@ -11,7 +11,24 @@ public enum ClickAction {
     PlayPause,
     NextTrack,
     PreviousTrack,
-    OpenSettings
+    OpenSettings,
+    OpenFallbackExecutable
+}
+
+public enum FallbackActionWhenMediaActive {
+    OpenCurrentMediaAppOrFallback,
+    OpenFallbackExecutable
+}
+
+public enum FallbackPlayerType {
+    Other,
+    Foobar
+}
+
+public enum FallbackOpenAction {
+    None,
+    OpenMediaSource,
+    OpenFallback
 }
 
 public sealed class IconBehaviorSettings {
@@ -32,7 +49,7 @@ public sealed class AppSettings {
     public IconBehaviorSettings PlayPauseIcon { get; set; } = new() {
         Visible = true,
         SingleClick = ClickAction.PlayPause,
-        DoubleClick = ClickAction.DoNothing
+        DoubleClick = ClickAction.OpenFallbackExecutable
     };
 
     public IconBehaviorSettings NextIcon { get; set; } = new() {
@@ -43,4 +60,7 @@ public sealed class AppSettings {
 
     public bool ShowHoverTrackInfo { get; set; } = true;
     public string FallbackExecutablePath { get; set; } = string.Empty;
+    public FallbackActionWhenMediaActive FallbackActionWhenMediaActive { get; set; } =
+        FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback;
+    public FallbackPlayerType FallbackPlayerType { get; set; } = FallbackPlayerType.Other;
 }

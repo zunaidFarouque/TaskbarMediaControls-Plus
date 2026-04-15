@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace TaskbarMediaControls;
@@ -10,9 +11,120 @@ public sealed class ClipboardService : IClipboardService {
 }
 
 public sealed class ProcessLauncher : IProcessLauncher {
-    public void Start(string path) {
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    private const int SwRestore = 9;
+    private const int SwShow = 5;
+
+    public ProcessLaunchResult Start(
+        string path,
+        bool avoidDuplicateWhenRunningWithoutWindow = false,
+        FallbackPlayerType playerType = FallbackPlayerType.Other
+    ) {
+        try {
+            if (string.IsNullOrWhiteSpace(path)) {
+                return new ProcessLaunchResult(ProcessLaunchOutcome.InvalidPath, "Executable path is empty.");
+            }
+
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath)) {
+                return new ProcessLaunchResult(ProcessLaunchOutcome.InvalidPath, "Executable path does not exist.");
+            }
+
+            if (playerType == FallbackPlayerType.Foobar) {
+                var foobarRestore = TryRestoreExistingWindow(fullPath);
+                if (foobarRestore == ExistingProcessState.RestoredExistingWindow) {
+                    return new ProcessLaunchResult(ProcessLaunchOutcome.RestoredExistingWindow);
+                }
+
+                return new ProcessLaunchResult(
+                    ProcessLaunchOutcome.FoobarRestoreFailed,
+                    "Could not restore Foobar2000 from tray or minimized state."
+                );
+            }
+
+            var existing = TryRestoreExistingWindow(fullPath);
+            if (existing == ExistingProcessState.RestoredExistingWindow) {
+                return new ProcessLaunchResult(ProcessLaunchOutcome.RestoredExistingWindow);
+            }
+
+            if (existing == ExistingProcessState.RunningWithoutWindow && avoidDuplicateWhenRunningWithoutWindow) {
+                return new ProcessLaunchResult(
+                    ProcessLaunchOutcome.RunningWithoutWindow,
+                    "Fallback application is running but does not expose a restorable window."
+                );
+            }
+
+            Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true });
+            return new ProcessLaunchResult(ProcessLaunchOutcome.LaunchedNewProcess);
+        }
+        catch (Exception ex) {
+            return new ProcessLaunchResult(ProcessLaunchOutcome.Failed, ex.Message);
+        }
     }
+
+    private static ExistingProcessState TryRestoreExistingWindow(string fullPath) {
+        try {
+            var processName = Path.GetFileNameWithoutExtension(fullPath);
+            if (string.IsNullOrWhiteSpace(processName)) {
+                return ExistingProcessState.None;
+            }
+
+            var hasMatchingProcessWithoutWindow = false;
+            foreach (var process in Process.GetProcessesByName(processName)) {
+                try {
+                    var modulePath = process.MainModule?.FileName;
+                    if (!string.Equals(modulePath, fullPath, StringComparison.OrdinalIgnoreCase)) {
+                        continue;
+                    }
+
+                    var handle = process.MainWindowHandle;
+                    if (handle == IntPtr.Zero) {
+                        hasMatchingProcessWithoutWindow = true;
+                        continue;
+                    }
+
+                    if (IsIconic(handle)) {
+                        ShowWindow(handle, SwRestore);
+                    }
+                    else {
+                        ShowWindow(handle, SwShow);
+                    }
+
+                    SetForegroundWindow(handle);
+                    return ExistingProcessState.RestoredExistingWindow;
+                }
+                catch {
+                    // Ignore protected or inaccessible process details.
+                }
+                finally {
+                    process.Dispose();
+                }
+            }
+
+            if (hasMatchingProcessWithoutWindow) {
+                return ExistingProcessState.RunningWithoutWindow;
+            }
+        }
+        catch {
+            // If detection fails, caller will launch a new process.
+        }
+
+        return ExistingProcessState.None;
+    }
+
+    private enum ExistingProcessState {
+        None,
+        RestoredExistingWindow,
+        RunningWithoutWindow
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
 }
 
 public sealed class StartupManager : IStartupManager {

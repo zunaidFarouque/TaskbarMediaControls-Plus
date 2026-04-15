@@ -12,12 +12,12 @@ public sealed record MenuState(
 public static class TrayFeatureLogic {
     public static IReadOnlyList<string> DefaultContextMenuLabels() {
         return [
-            "Exit / Close",
             "Settings",
+            "Close Media Controls",
             "---",
-            "Media title: N/A",
-            "Media artist: N/A",
-            "Media playing with: N/A",
+            "Title: N/A",
+            "Artist: N/A",
+            "Playing with: N/A",
             "---",
             "Previous Track",
             "Play/Pause",
@@ -28,9 +28,9 @@ public static class TrayFeatureLogic {
     public static MenuState BuildMenuState(MediaSessionInfo info, bool canOpenFallbackApp) {
         var hasSession = info.HasActiveSession;
         return new MenuState(
-            $"Media title: {info.Title}",
-            $"Media artist: {info.Artist}",
-            $"Media playing with: {info.SourceApp}",
+            $"Title: {info.Title}",
+            $"Artist: {info.Artist}",
+            $"Playing with: {info.SourceApp}",
             hasSession,
             hasSession,
             hasSession || canOpenFallbackApp
@@ -76,5 +76,47 @@ public static class TrayFeatureLogic {
 
     public static bool[] GetIconVisibilities(AppSettings settings) {
         return [settings.PreviousIcon.Visible, settings.PlayPauseIcon.Visible, settings.NextIcon.Visible];
+    }
+
+    public static bool ShouldOpenCurrentMediaAppBeforeFallback(AppSettings settings, bool hasActiveSession) {
+        if (!hasActiveSession) {
+            return false;
+        }
+
+        return settings.FallbackActionWhenMediaActive == FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback;
+    }
+
+    public static FallbackOpenAction ResolveFallbackOpenAction(
+        AppSettings settings,
+        bool hasActiveSession,
+        bool hasValidSourcePath,
+        bool hasValidFallbackPath
+    ) {
+        if (hasActiveSession &&
+            settings.FallbackActionWhenMediaActive == FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback) {
+            if (hasValidSourcePath) {
+                return FallbackOpenAction.OpenMediaSource;
+            }
+
+            return hasValidFallbackPath ? FallbackOpenAction.OpenFallback : FallbackOpenAction.None;
+        }
+
+        return hasValidFallbackPath ? FallbackOpenAction.OpenFallback : FallbackOpenAction.None;
+    }
+
+    public static string BuildProcessLaunchErrorMessage(ProcessLaunchResult result, string operationDescription) {
+        return result.Outcome switch {
+            ProcessLaunchOutcome.RunningWithoutWindow =>
+                "The fallback app is running in the background but has no restorable window.",
+            ProcessLaunchOutcome.FoobarRestoreFailed =>
+                "Could not restore Foobar2000 from tray/minimized state.",
+            ProcessLaunchOutcome.InvalidPath =>
+                $"{operationDescription} failed because the executable path is invalid.",
+            ProcessLaunchOutcome.Failed when !string.IsNullOrWhiteSpace(result.ErrorMessage) =>
+                $"{operationDescription} failed: {result.ErrorMessage}",
+            ProcessLaunchOutcome.Failed =>
+                $"{operationDescription} failed due to an unexpected error.",
+            _ => $"{operationDescription} could not be completed."
+        };
     }
 }

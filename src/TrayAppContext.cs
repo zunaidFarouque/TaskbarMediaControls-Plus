@@ -131,25 +131,25 @@ public class TrayAppContext : ApplicationContext {
     private ContextMenuStrip BuildContextMenu() {
         var menu = new ContextMenuStrip();
 
-        var exitItem = new ToolStripMenuItem("Exit / Close");
-        exitItem.Click += (_, _) => Application.Exit();
-        menu.Items.Add(exitItem);
-
         var settingsItem = new ToolStripMenuItem("Settings");
         settingsItem.Click += (_, _) => OpenSettings();
         menu.Items.Add(settingsItem);
 
+        var closeItem = new ToolStripMenuItem("Close Media Controls");
+        closeItem.Click += (_, _) => Application.Exit();
+        menu.Items.Add(closeItem);
+
         menu.Items.Add(new ToolStripSeparator());
 
-        _mediaTitleItem = new ToolStripMenuItem("Media title: N/A");
+        _mediaTitleItem = new ToolStripMenuItem("Title: N/A");
         _mediaTitleItem.Click += (_, _) => CopyIfAvailable(_currentMediaInfo.Title);
         menu.Items.Add(_mediaTitleItem);
 
-        _mediaArtistItem = new ToolStripMenuItem("Media artist: N/A");
+        _mediaArtistItem = new ToolStripMenuItem("Artist: N/A");
         _mediaArtistItem.Click += (_, _) => CopyIfAvailable(_currentMediaInfo.Artist);
         menu.Items.Add(_mediaArtistItem);
 
-        _mediaAppItem = new ToolStripMenuItem("Media playing with: N/A");
+        _mediaAppItem = new ToolStripMenuItem("Playing with: N/A");
         _mediaAppItem.Click += (_, _) => OpenCurrentMediaAppOrFallback();
         menu.Items.Add(_mediaAppItem);
 
@@ -215,6 +215,9 @@ public class TrayAppContext : ApplicationContext {
             case ClickAction.OpenSettings:
                 OpenSettings();
                 return;
+            case ClickAction.OpenFallbackExecutable:
+                OpenFallbackExecutable();
+                return;
             default:
                 return;
         }
@@ -268,19 +271,109 @@ public class TrayAppContext : ApplicationContext {
 
     private void OpenCurrentMediaAppOrFallback() {
         var sourcePath = _currentMediaInfo.SourceProcessPath;
-        if (!string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath)) {
-            _processLauncher.Start(sourcePath);
+        if (IsValidExecutablePath(sourcePath)) {
+            TryLaunchPath(
+                sourcePath,
+                avoidDuplicateWhenRunningWithoutWindow: IsFallbackExecutablePath(sourcePath),
+                playerType: IsFallbackExecutablePath(sourcePath) ? _settings.FallbackPlayerType : FallbackPlayerType.Other,
+                operationDescription: "open current media application"
+            );
             return;
         }
 
-        if (CanOpenFallbackApp()) {
-            _processLauncher.Start(_settings.FallbackExecutablePath);
-        }
+        TryLaunchPath(
+            _settings.FallbackExecutablePath,
+            avoidDuplicateWhenRunningWithoutWindow: true,
+            playerType: _settings.FallbackPlayerType,
+            operationDescription: "open fallback application"
+        );
     }
 
     private bool CanOpenFallbackApp() {
         return !string.IsNullOrWhiteSpace(_settings.FallbackExecutablePath) &&
                File.Exists(_settings.FallbackExecutablePath);
+    }
+
+    private void OpenFallbackExecutable() {
+        var sourcePath = _currentMediaInfo.SourceProcessPath;
+        var hasValidSourcePath = IsValidExecutablePath(sourcePath);
+        var hasValidFallbackPath = CanOpenFallbackApp();
+        var action = TrayFeatureLogic.ResolveFallbackOpenAction(
+            _settings,
+            _currentMediaInfo.HasActiveSession,
+            hasValidSourcePath,
+            hasValidFallbackPath
+        );
+
+        switch (action) {
+            case FallbackOpenAction.OpenMediaSource:
+                TryLaunchPath(
+                    sourcePath,
+                    avoidDuplicateWhenRunningWithoutWindow: IsFallbackExecutablePath(sourcePath),
+                    playerType: IsFallbackExecutablePath(sourcePath) ? _settings.FallbackPlayerType : FallbackPlayerType.Other,
+                    operationDescription: "open current media application"
+                );
+                return;
+            case FallbackOpenAction.OpenFallback:
+                TryLaunchPath(
+                    _settings.FallbackExecutablePath,
+                    avoidDuplicateWhenRunningWithoutWindow: true,
+                    playerType: _settings.FallbackPlayerType,
+                    operationDescription: "open fallback application"
+                );
+                return;
+            default:
+                ShowTrayError("No executable available",
+                    "No valid media player executable was found for this action.");
+                return;
+        }
+    }
+
+    private bool IsValidExecutablePath(string? path) {
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+    }
+
+    private bool IsFallbackExecutablePath(string? path) {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(_settings.FallbackExecutablePath)) {
+            return false;
+        }
+
+        try {
+            var fullPath = Path.GetFullPath(path);
+            var fallbackPath = Path.GetFullPath(_settings.FallbackExecutablePath);
+            return string.Equals(fullPath, fallbackPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch {
+            return false;
+        }
+    }
+
+    private void TryLaunchPath(
+        string? path,
+        bool avoidDuplicateWhenRunningWithoutWindow,
+        FallbackPlayerType playerType,
+        string operationDescription
+    ) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            ShowTrayError("Invalid executable", $"{operationDescription} failed because the path is empty.");
+            return;
+        }
+
+        var result = _processLauncher.Start(path, avoidDuplicateWhenRunningWithoutWindow, playerType);
+        if (result.IsSuccess) {
+            return;
+        }
+
+        ShowTrayError("Media action failed",
+            TrayFeatureLogic.BuildProcessLaunchErrorMessage(result, operationDescription));
+    }
+
+    private void ShowTrayError(string title, string message) {
+        var icon = _trayIcons.FirstOrDefault(candidate => candidate.Visible) ?? _trayIcons[1];
+        icon.BalloonTipTitle = title;
+        icon.BalloonTipText = message;
+        icon.BalloonTipIcon = ToolTipIcon.Warning;
+        icon.ShowBalloonTip(5000);
     }
 
     private void TrySetStartup(bool enable) {

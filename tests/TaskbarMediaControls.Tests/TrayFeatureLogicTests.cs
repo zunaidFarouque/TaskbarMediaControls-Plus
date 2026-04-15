@@ -5,12 +5,12 @@ public class TrayFeatureLogicTests {
     public void DefaultContextMenu_ShouldContainExpectedSectionsInOrder() {
         var labels = TrayFeatureLogic.DefaultContextMenuLabels();
 
-        Assert.Equal("Exit / Close", labels[0]);
-        Assert.Equal("Settings", labels[1]);
+        Assert.Equal("Settings", labels[0]);
+        Assert.Equal("Close Media Controls", labels[1]);
         Assert.Equal("---", labels[2]);
-        Assert.Equal("Media title: N/A", labels[3]);
-        Assert.Equal("Media artist: N/A", labels[4]);
-        Assert.Equal("Media playing with: N/A", labels[5]);
+        Assert.Equal("Title: N/A", labels[3]);
+        Assert.Equal("Artist: N/A", labels[4]);
+        Assert.Equal("Playing with: N/A", labels[5]);
         Assert.Equal("---", labels[6]);
         Assert.Equal("Previous Track", labels[7]);
         Assert.Equal("Play/Pause", labels[8]);
@@ -31,7 +31,7 @@ public class TrayFeatureLogicTests {
         Assert.False(state.MediaTitleEnabled);
         Assert.False(state.MediaArtistEnabled);
         Assert.False(state.MediaAppEnabled);
-        Assert.Equal("Media title: N/A", state.MediaTitleText);
+        Assert.Equal("Title: N/A", state.MediaTitleText);
     }
 
     [Fact]
@@ -41,6 +41,24 @@ public class TrayFeatureLogicTests {
 
         Assert.False(state.MediaTitleEnabled);
         Assert.False(state.MediaArtistEnabled);
+        Assert.True(state.MediaAppEnabled);
+    }
+
+    [Fact]
+    public void BuildMenuState_WithMetadata_ShouldRenderValuesAndEnableItems() {
+        var info = new MediaSessionInfo {
+            HasActiveSession = true,
+            Title = "Song A",
+            Artist = "Artist B",
+            SourceApp = "Player C"
+        };
+        var state = TrayFeatureLogic.BuildMenuState(info, canOpenFallbackApp: false);
+
+        Assert.Equal("Title: Song A", state.MediaTitleText);
+        Assert.Equal("Artist: Artist B", state.MediaArtistText);
+        Assert.Equal("Playing with: Player C", state.MediaAppText);
+        Assert.True(state.MediaTitleEnabled);
+        Assert.True(state.MediaArtistEnabled);
         Assert.True(state.MediaAppEnabled);
     }
 
@@ -89,5 +107,77 @@ public class TrayFeatureLogicTests {
         Assert.Equal(ClickAction.PreviousTrack, TrayFeatureLogic.GetSingleClickAction(settings, 0));
         Assert.Equal(ClickAction.PlayPause, TrayFeatureLogic.GetSingleClickAction(settings, 1));
         Assert.Equal(ClickAction.NextTrack, TrayFeatureLogic.GetSingleClickAction(settings, 2));
+    }
+
+    [Fact]
+    public void ShouldOpenCurrentMediaAppBeforeFallback_ShouldBeTrueForDefaultWithActiveSession() {
+        var settings = new AppSettings();
+
+        Assert.True(TrayFeatureLogic.ShouldOpenCurrentMediaAppBeforeFallback(settings, hasActiveSession: true));
+    }
+
+    [Fact]
+    public void ShouldOpenCurrentMediaAppBeforeFallback_ShouldBeFalseWhenSettingPrefersFallback() {
+        var settings = new AppSettings {
+            FallbackActionWhenMediaActive = FallbackActionWhenMediaActive.OpenFallbackExecutable
+        };
+
+        Assert.False(TrayFeatureLogic.ShouldOpenCurrentMediaAppBeforeFallback(settings, hasActiveSession: true));
+    }
+
+    [Fact]
+    public void ShouldOpenCurrentMediaAppBeforeFallback_ShouldBeFalseWhenNoActiveSession() {
+        var settings = new AppSettings();
+
+        Assert.False(TrayFeatureLogic.ShouldOpenCurrentMediaAppBeforeFallback(settings, hasActiveSession: false));
+    }
+
+    [Theory]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, true, true, FallbackOpenAction.OpenMediaSource)]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, true, false, FallbackOpenAction.OpenMediaSource)]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, false, true, FallbackOpenAction.OpenFallback)]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, false, false, FallbackOpenAction.None)]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenFallbackExecutable, true, true, FallbackOpenAction.OpenFallback)]
+    [InlineData(true, FallbackActionWhenMediaActive.OpenFallbackExecutable, true, false, FallbackOpenAction.None)]
+    [InlineData(false, FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, true, true, FallbackOpenAction.OpenFallback)]
+    [InlineData(false, FallbackActionWhenMediaActive.OpenFallbackExecutable, false, true, FallbackOpenAction.OpenFallback)]
+    [InlineData(false, FallbackActionWhenMediaActive.OpenFallbackExecutable, false, false, FallbackOpenAction.None)]
+    public void ResolveFallbackOpenAction_ShouldFollowRuntimeMatrix(
+        bool hasActiveSession,
+        FallbackActionWhenMediaActive configuredBehavior,
+        bool hasValidSourcePath,
+        bool hasValidFallbackPath,
+        FallbackOpenAction expected
+    ) {
+        var settings = new AppSettings {
+            FallbackActionWhenMediaActive = configuredBehavior
+        };
+
+        var action = TrayFeatureLogic.ResolveFallbackOpenAction(
+            settings,
+            hasActiveSession,
+            hasValidSourcePath,
+            hasValidFallbackPath
+        );
+
+        Assert.Equal(expected, action);
+    }
+
+    [Theory]
+    [InlineData(ProcessLaunchOutcome.RunningWithoutWindow, null, "open fallback", "running in the background")]
+    [InlineData(ProcessLaunchOutcome.FoobarRestoreFailed, null, "open fallback", "foobar2000")]
+    [InlineData(ProcessLaunchOutcome.InvalidPath, null, "open fallback", "path is invalid")]
+    [InlineData(ProcessLaunchOutcome.Failed, "Access denied", "open fallback", "Access denied")]
+    [InlineData(ProcessLaunchOutcome.Failed, null, "open fallback", "unexpected error")]
+    public void BuildProcessLaunchErrorMessage_ShouldDescribeLaunchFailures(
+        ProcessLaunchOutcome outcome,
+        string? detail,
+        string operationDescription,
+        string expectedSnippet
+    ) {
+        var result = new ProcessLaunchResult(outcome, detail);
+        var message = TrayFeatureLogic.BuildProcessLaunchErrorMessage(result, operationDescription);
+
+        Assert.Contains(expectedSnippet, message, StringComparison.OrdinalIgnoreCase);
     }
 }

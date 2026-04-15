@@ -19,7 +19,9 @@ public static class SettingsModelLogic {
                 DoubleClick = source.NextIcon.DoubleClick
             },
             ShowHoverTrackInfo = source.ShowHoverTrackInfo,
-            FallbackExecutablePath = source.FallbackExecutablePath
+            FallbackExecutablePath = source.FallbackExecutablePath,
+            FallbackActionWhenMediaActive = source.FallbackActionWhenMediaActive,
+            FallbackPlayerType = source.FallbackPlayerType
         };
     }
 }

@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace TaskbarMediaControls;
 
 public sealed class AppSettingsStore : IAppSettingsStore {
-    public const int CurrentConfigVersion = 2;
+    public const int CurrentConfigVersion = 6;
 
     private static readonly JsonSerializerOptions JsonOptions = new() {
         WriteIndented = true
@@ -12,10 +12,9 @@ public sealed class AppSettingsStore : IAppSettingsStore {
     private readonly string _settingsPath;
 
     public AppSettingsStore() {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var folder = Path.Combine(appData, "TaskbarMediaControls");
-        Directory.CreateDirectory(folder);
-        _settingsPath = Path.Combine(folder, "settings.json");
+        var exeDirectory = Path.GetDirectoryName(Application.ExecutablePath) ?? AppContext.BaseDirectory;
+        Directory.CreateDirectory(exeDirectory);
+        _settingsPath = Path.Combine(exeDirectory, "settings.json");
     }
 
     public AppSettingsStore(string settingsPath) {
@@ -79,7 +78,7 @@ public sealed class AppSettingsStore : IAppSettingsStore {
             settings.PlayPauseIcon = new IconBehaviorSettings {
             Visible = true,
             SingleClick = ClickAction.PlayPause,
-            DoubleClick = ClickAction.DoNothing
+            DoubleClick = ClickAction.OpenFallbackExecutable
         };
             changed = true;
         }
@@ -98,12 +97,22 @@ public sealed class AppSettingsStore : IAppSettingsStore {
             changed = true;
         }
 
+        if (!Enum.IsDefined(settings.FallbackActionWhenMediaActive)) {
+            settings.FallbackActionWhenMediaActive = FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback;
+            changed = true;
+        }
+
+        if (!Enum.IsDefined(settings.FallbackPlayerType)) {
+            settings.FallbackPlayerType = FallbackPlayerType.Other;
+            changed = true;
+        }
+
         if (settings.ConfigVersion < 1) {
             settings.ConfigVersion = 1;
             changed = true;
         }
 
-        // Legacy migration: old configs may have lost single-click defaults.
+        // Legacy migration: old configs may have lost obvious single-click defaults.
         if (settings.ConfigVersion < 2) {
             if (settings.PreviousIcon.SingleClick == ClickAction.DoNothing) {
                 settings.PreviousIcon.SingleClick = ClickAction.PreviousTrack;
@@ -117,6 +126,48 @@ public sealed class AppSettingsStore : IAppSettingsStore {
 
             if (settings.NextIcon.SingleClick == ClickAction.DoNothing) {
                 settings.NextIcon.SingleClick = ClickAction.NextTrack;
+                changed = true;
+            }
+        }
+
+        // Legacy migration: ensure first-time double-click defaults remain "DoNothing".
+        if (settings.ConfigVersion < 3) {
+            if (settings.PreviousIcon.DoubleClick != ClickAction.DoNothing) {
+                settings.PreviousIcon.DoubleClick = ClickAction.DoNothing;
+                changed = true;
+            }
+
+            if (settings.PlayPauseIcon.DoubleClick != ClickAction.DoNothing) {
+                settings.PlayPauseIcon.DoubleClick = ClickAction.DoNothing;
+                changed = true;
+            }
+
+            if (settings.NextIcon.DoubleClick != ClickAction.DoNothing) {
+                settings.NextIcon.DoubleClick = ClickAction.DoNothing;
+                changed = true;
+            }
+        }
+
+        // Legacy migration: promote play/pause double-click fallback launch default.
+        if (settings.ConfigVersion < 4) {
+            if (settings.PlayPauseIcon.DoubleClick == ClickAction.DoNothing) {
+                settings.PlayPauseIcon.DoubleClick = ClickAction.OpenFallbackExecutable;
+                changed = true;
+            }
+        }
+
+        // Legacy migration: initialize the new setting only when missing/invalid.
+        if (settings.ConfigVersion < 5) {
+            if (!Enum.IsDefined(settings.FallbackActionWhenMediaActive)) {
+                settings.FallbackActionWhenMediaActive = FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback;
+                changed = true;
+            }
+        }
+
+        // Legacy migration: initialize fallback player type only when missing/invalid.
+        if (settings.ConfigVersion < 6) {
+            if (!Enum.IsDefined(settings.FallbackPlayerType)) {
+                settings.FallbackPlayerType = FallbackPlayerType.Other;
                 changed = true;
             }
         }

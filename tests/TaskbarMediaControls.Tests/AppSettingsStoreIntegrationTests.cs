@@ -15,6 +15,17 @@ public class AppSettingsStoreIntegrationTests {
         Assert.True(settings.PreviousIcon.Visible);
         Assert.True(settings.ShowHoverTrackInfo);
         Assert.Equal(AppSettingsStore.CurrentConfigVersion, settings.ConfigVersion);
+        Assert.Equal(ClickAction.PreviousTrack, settings.PreviousIcon.SingleClick);
+        Assert.Equal(ClickAction.PlayPause, settings.PlayPauseIcon.SingleClick);
+        Assert.Equal(ClickAction.NextTrack, settings.NextIcon.SingleClick);
+        Assert.Equal(ClickAction.DoNothing, settings.PreviousIcon.DoubleClick);
+        Assert.Equal(ClickAction.OpenFallbackExecutable, settings.PlayPauseIcon.DoubleClick);
+        Assert.Equal(ClickAction.DoNothing, settings.NextIcon.DoubleClick);
+        Assert.Equal(
+            FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback,
+            settings.FallbackActionWhenMediaActive
+        );
+        Assert.Equal(FallbackPlayerType.Other, settings.FallbackPlayerType);
     }
 
     [Fact]
@@ -24,10 +35,16 @@ public class AppSettingsStoreIntegrationTests {
         var store = new AppSettingsStore(path);
         var input = new AppSettings {
             FallbackExecutablePath = @"C:\A\B.exe",
-            ShowHoverTrackInfo = false
+            ShowHoverTrackInfo = false,
+            ConfigVersion = AppSettingsStore.CurrentConfigVersion
         };
         input.NextIcon.Visible = false;
-        input.PlayPauseIcon.DoubleClick = ClickAction.OpenSettings;
+        input.PreviousIcon.SingleClick = ClickAction.OpenSettings;
+        input.PlayPauseIcon.SingleClick = ClickAction.NextTrack;
+        input.NextIcon.SingleClick = ClickAction.PreviousTrack;
+        input.PlayPauseIcon.DoubleClick = ClickAction.DoNothing;
+        input.FallbackActionWhenMediaActive = FallbackActionWhenMediaActive.OpenFallbackExecutable;
+        input.FallbackPlayerType = FallbackPlayerType.Foobar;
 
         store.Save(input);
         var output = store.Load();
@@ -35,7 +52,12 @@ public class AppSettingsStoreIntegrationTests {
         Assert.Equal(@"C:\A\B.exe", output.FallbackExecutablePath);
         Assert.False(output.ShowHoverTrackInfo);
         Assert.False(output.NextIcon.Visible);
-        Assert.Equal(ClickAction.OpenSettings, output.PlayPauseIcon.DoubleClick);
+        Assert.Equal(ClickAction.OpenSettings, output.PreviousIcon.SingleClick);
+        Assert.Equal(ClickAction.NextTrack, output.PlayPauseIcon.SingleClick);
+        Assert.Equal(ClickAction.PreviousTrack, output.NextIcon.SingleClick);
+        Assert.Equal(ClickAction.DoNothing, output.PlayPauseIcon.DoubleClick);
+        Assert.Equal(FallbackActionWhenMediaActive.OpenFallbackExecutable, output.FallbackActionWhenMediaActive);
+        Assert.Equal(FallbackPlayerType.Foobar, output.FallbackPlayerType);
     }
 
     [Fact]
@@ -94,6 +116,27 @@ public class AppSettingsStoreIntegrationTests {
     }
 
     [Fact]
+    public void Load_WhenLegacyDoubleClickConfigured_ShouldMigratePlayPauseToFallbackDefault() {
+        using var temp = new TempDirectory();
+        var path = Path.Combine(temp.Path, "settings.json");
+        var legacy = new AppSettings {
+            ConfigVersion = 2
+        };
+        legacy.PreviousIcon.DoubleClick = ClickAction.PreviousTrack;
+        legacy.PlayPauseIcon.DoubleClick = ClickAction.PlayPause;
+        legacy.NextIcon.DoubleClick = ClickAction.NextTrack;
+        File.WriteAllText(path, JsonSerializer.Serialize(legacy));
+
+        var store = new AppSettingsStore(path);
+        var loaded = store.Load();
+
+        Assert.Equal(ClickAction.DoNothing, loaded.PreviousIcon.DoubleClick);
+        Assert.Equal(ClickAction.OpenFallbackExecutable, loaded.PlayPauseIcon.DoubleClick);
+        Assert.Equal(ClickAction.DoNothing, loaded.NextIcon.DoubleClick);
+        Assert.Equal(AppSettingsStore.CurrentConfigVersion, loaded.ConfigVersion);
+    }
+
+    [Fact]
     public void Load_WhenVersionMissing_ShouldUpgradeAndPersist() {
         using var temp = new TempDirectory();
         var path = Path.Combine(temp.Path, "settings.json");
@@ -111,6 +154,57 @@ public class AppSettingsStoreIntegrationTests {
         Assert.Equal(AppSettingsStore.CurrentConfigVersion, loaded.ConfigVersion);
         Assert.NotNull(persisted);
         Assert.Equal(AppSettingsStore.CurrentConfigVersion, persisted!.ConfigVersion);
+    }
+
+    [Fact]
+    public void Load_WhenLegacyVersionWithExplicitValue_ShouldPreserveFallbackMediaActiveBehavior() {
+        using var temp = new TempDirectory();
+        var path = Path.Combine(temp.Path, "settings.json");
+        var legacy = new AppSettings {
+            ConfigVersion = 4,
+            FallbackActionWhenMediaActive = FallbackActionWhenMediaActive.OpenFallbackExecutable
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(legacy));
+
+        var store = new AppSettingsStore(path);
+        var loaded = store.Load();
+
+        Assert.Equal(FallbackActionWhenMediaActive.OpenFallbackExecutable, loaded.FallbackActionWhenMediaActive);
+        Assert.Equal(AppSettingsStore.CurrentConfigVersion, loaded.ConfigVersion);
+    }
+
+    [Fact]
+    public void Load_WhenFallbackMediaActiveBehaviorIsInvalid_ShouldNormalizeToDefault() {
+        using var temp = new TempDirectory();
+        var path = Path.Combine(temp.Path, "settings.json");
+        var invalid = new AppSettings {
+            ConfigVersion = AppSettingsStore.CurrentConfigVersion,
+            FallbackActionWhenMediaActive = (FallbackActionWhenMediaActive)999
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(invalid));
+
+        var store = new AppSettingsStore(path);
+        var loaded = store.Load();
+
+        Assert.Equal(FallbackActionWhenMediaActive.OpenCurrentMediaAppOrFallback, loaded.FallbackActionWhenMediaActive);
+        Assert.Equal(AppSettingsStore.CurrentConfigVersion, loaded.ConfigVersion);
+    }
+
+    [Fact]
+    public void Load_WhenFallbackPlayerTypeIsInvalid_ShouldNormalizeToDefault() {
+        using var temp = new TempDirectory();
+        var path = Path.Combine(temp.Path, "settings.json");
+        var invalid = new AppSettings {
+            ConfigVersion = AppSettingsStore.CurrentConfigVersion,
+            FallbackPlayerType = (FallbackPlayerType)999
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(invalid));
+
+        var store = new AppSettingsStore(path);
+        var loaded = store.Load();
+
+        Assert.Equal(FallbackPlayerType.Other, loaded.FallbackPlayerType);
+        Assert.Equal(AppSettingsStore.CurrentConfigVersion, loaded.ConfigVersion);
     }
 
     private sealed class TempDirectory : IDisposable {

@@ -1,16 +1,26 @@
 namespace TaskbarMediaControls;
 
 public sealed class MediaSessionService : IMediaSessionService {
+    private readonly IMediaMetadataProvider _provider;
+
     public event Action<MediaSessionInfo>? MediaInfoChanged;
 
+    public MediaSessionService()
+        : this(new GsmtcMediaMetadataProvider()) {
+    }
+
+    public MediaSessionService(IMediaMetadataProvider provider) {
+        _provider = provider;
+        _provider.MediaInfoChanged += info => Publish(info);
+    }
+
     public async Task InitializeAsync() {
-        await Task.CompletedTask;
-        Publish(new MediaSessionInfo { HasActiveSession = false });
+        await _provider.InitializeAsync();
+        Publish(await _provider.GetCurrentInfoAsync());
     }
 
     public async Task<MediaSessionInfo> GetCurrentInfoAsync() {
-        await Task.CompletedTask;
-        return new MediaSessionInfo { HasActiveSession = false };
+        return await _provider.GetCurrentInfoAsync();
     }
 
     public async Task RefreshAsync() {
@@ -23,6 +33,6 @@ public sealed class MediaSessionService : IMediaSessionService {
     }
 
     public void Dispose() {
-        // No unmanaged resources yet.
+        _provider.Dispose();
     }
 }
