@@ -205,18 +205,67 @@ dotnet test "./TaskbarMediaControls.sln"
 
 ## 6) Release and Packaging Notes
 
-To generate release artifacts expected by installer workflow:
+Portable ZIP is the default release path.
+
+Generate publish output:
 
 ```powershell
 dotnet publish "./TaskbarMediaControls.csproj" -c Release
 ```
 
-`setup.iss` expects published files (`.exe`, `.dll`, `.deps.json`, `.runtimeconfig.json`, `.pdb`) in the `bin/Release/net8.0-windows10.0.19041.0/publish` output tree.
+Published files are written to `bin/Release/net8.0-windows10.0.19041.0/publish`.
 
-Before building installer in Inno Setup:
+### Portable ZIP (framework-dependent)
+
+`TaskbarMediaControls-plus` is portable by default because `settings.json` is stored beside the executable.
+
+Build and archive a portable release from repo root:
+
+```powershell
+$version = "1.0.0"
+dotnet publish "./TaskbarMediaControls.csproj" -c Release
+$publishDir = "./bin/Release/net8.0-windows10.0.19041.0/publish"
+$zipPath = "./bin/Release/TaskbarMediaControls-Plus-v$version-portable.zip"
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath
+Get-FileHash $zipPath -Algorithm SHA256
+```
+
+Expected ZIP naming convention:
+
+- `TaskbarMediaControls-Plus-v<version>-portable.zip`
+
+Use the printed SHA256 hash for Scoop manifest updates.
+
+Before packaging portable ZIP for release:
 
 - Confirm publish output exists and includes all expected files
+- Include `scripts/shortcut-manager.bat` in release assets
 - Run manual checklist once on published executable
+
+### Scoop distribution (own bucket)
+
+For your own Scoop bucket:
+
+1. Upload the portable ZIP to your GitHub release.
+2. Update bucket manifest `TaskbarMediaControls-Plus.json` with:
+   - new `version`
+   - new `url` pointing to release ZIP
+   - new `hash` from `Get-FileHash`
+3. Commit and push bucket changes.
+
+Users install with:
+
+```powershell
+scoop bucket add <bucket-name> <bucket-url>
+scoop install TaskbarMediaControls-Plus
+```
+
+### Optional installer build
+
+Installer build remains available for users who prefer installation workflow.
+
+`setup.iss` expects published files (`.exe`, `.dll`, `.deps.json`, `.runtimeconfig.json`, `.pdb`) in the `bin/Release/net8.0-windows10.0.19041.0/publish` output tree.
 
 ## 7) Definition of Done for Contributions
 

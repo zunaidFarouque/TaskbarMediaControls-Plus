@@ -40,12 +40,53 @@ Detailed technical change notes are in [PLUS_CHANGES.md](./PLUS_CHANGES.md).
 - Fallback media application launch flow with player-type handling
 - Hover metadata display (optional)
 
-## Installation
+## Get it
 
-1. Download the latest release from this repository's Releases page.
-2. Run the executable (or installer package if provided).
-3. Pin/move tray icons from "Show hidden icons" if needed.
-4. Use tray right-click menu to open settings, configure startup, or exit.
+### 1) Portable ZIP (main)
+
+Portable is the main distribution model for `TaskbarMediaControls-plus`.
+Installation is not required for core functionality.
+
+- Download: `TaskbarMediaControls-Plus-v<version>-portable.zip`
+- Extract to any folder.
+- Run `TaskbarMediaControlsPlus.exe`.
+- Settings are saved in `settings.json` in the same folder as the executable.
+
+If you move the portable folder, settings move with it.
+
+This portable build is framework-dependent, so users need the .NET runtime available.
+
+### 2) Scoop (also available)
+
+Available through Scoop as `TaskbarMediaControls-Plus`:
+
+```powershell
+scoop bucket add <bucket-name> <bucket-url>
+scoop install TaskbarMediaControls-Plus
+```
+
+Update with:
+
+```powershell
+scoop update
+scoop update TaskbarMediaControls-Plus
+```
+
+### 3) Optional installer
+
+An installer build is also available for users who prefer setup/uninstall and normal Start menu integration.
+Portable remains the recommended/default option.
+
+## Shortcut management (portable)
+
+Use `scripts/shortcut-manager.bat` to toggle shortcuts interactively.
+
+- `1` toggles Desktop shortcut
+- `2` toggles Start Menu shortcut
+- `3` toggles Startup shortcut
+- Press `Enter` to apply selected toggle(s)
+
+You can run the BAT repeatedly; each selected target is toggled on/off depending on current state.
 
 ## Build and run (local)
 
@@ -56,6 +97,9 @@ dotnet run --project "./TaskbarMediaControls.csproj"
 ```
 
 More setup and testing guidance is in [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md).
+
+Scoop manifest template for maintainers: [scoop/TaskbarMediaControls-Plus.json](./scoop/TaskbarMediaControls-Plus.json)
+Release process checklist: [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md)
 
 ## Compatibility and limitations
 
