@@ -1,6 +1,6 @@
-# TaskbarMediaControls Development Guide
+# TaskbarMediaControls-plus Development Guide
 
-This guide is for contributors and AI agents working on `TaskbarMediaControls`.
+This guide is for contributors and AI agents working on `TaskbarMediaControls-plus`.
 It focuses on three outcomes:
 
 - Runnable on this device (or any Windows dev machine with .NET 8 SDK installed)
@@ -211,7 +211,7 @@ To generate release artifacts expected by installer workflow:
 dotnet publish "./TaskbarMediaControls.csproj" -c Release
 ```
 
-`setup.iss` expects published files (`.exe`, `.dll`, `.deps.json`, `.runtimeconfig.json`, `.pdb`) in the `bin/Release/net8.0-windows/publish` output tree.
+`setup.iss` expects published files (`.exe`, `.dll`, `.deps.json`, `.runtimeconfig.json`, `.pdb`) in the `bin/Release/net8.0-windows10.0.19041.0/publish` output tree.
 
 Before building installer in Inno Setup:
 

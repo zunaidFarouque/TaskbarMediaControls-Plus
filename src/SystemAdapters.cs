@@ -13,6 +13,14 @@ public sealed class ClipboardService : IClipboardService {
 public sealed class ProcessLauncher : IProcessLauncher {
     private const int SwRestore = 9;
     private const int SwShow = 5;
+    private const int FoobarRestoreVerifyDelayMs = 400;
+    private const int FoobarRestoreVerifyAttempts = 10;
+    private static readonly string[] FoobarShowMainWindowMenuCommandVariants = [
+        "Foobar2000/Show main window",
+        "Show main window",
+        "Foobar2000/Toggle main window",
+        "Toggle main window"
+    ];
 
     public ProcessLaunchResult Start(
         string path,
@@ -31,14 +39,63 @@ public sealed class ProcessLauncher : IProcessLauncher {
 
             if (playerType == FallbackPlayerType.Foobar) {
                 var foobarRestore = TryRestoreExistingWindow(fullPath);
-                if (foobarRestore == ExistingProcessState.RestoredExistingWindow) {
-                    return new ProcessLaunchResult(ProcessLaunchOutcome.RestoredExistingWindow);
+
+                // If foobar2000 is running but has no restorable window handle (e.g., "minimized to tray"),
+                // re-run detection after issuing the show command.
+                var isFoobar2000Executable = IsFoobar2000Executable(fullPath);
+                var hasRunningProcessWithoutWindow = foobarRestore != ExistingProcessState.None ||
+                                                      (isFoobar2000Executable && HasAnyMatchingProcessWithoutWindow(fullPath));
+
+                var candidateExecutablePaths = GetCandidateExecutablePaths(fullPath);
+                var startedAny = false;
+
+                foreach (var candidatePath in candidateExecutablePaths) {
+                    if (!TryStartProcess(candidatePath, "/show")) {
+                        continue;
+                    }
+
+                    startedAny = true;
+                    if (WaitForFoobarRestored(candidatePath)) {
+                        return new ProcessLaunchResult(ProcessLaunchOutcome.RestoredExistingWindow);
+                    }
+
+                    // Manual testing shows foobar2000.exe /show works even when our window probing
+                    // cannot immediately observe the tray-restored UI. Treat a successful /show
+                    // invocation as success for foobar specifically.
+                    return new ProcessLaunchResult(
+                        hasRunningProcessWithoutWindow
+                            ? ProcessLaunchOutcome.RestoredExistingWindow
+                            : ProcessLaunchOutcome.LaunchedNewProcess
+                    );
                 }
 
-                return new ProcessLaunchResult(
-                    ProcessLaunchOutcome.FoobarRestoreFailed,
-                    "Could not restore Foobar2000 from tray or minimized state."
-                );
+                if (hasRunningProcessWithoutWindow) {
+                    foreach (var candidatePath in candidateExecutablePaths) {
+                        foreach (var commandVariant in FoobarShowMainWindowMenuCommandVariants) {
+                            var commandArgs = $"/command:\"{commandVariant}\"";
+                            if (!TryStartProcess(candidatePath, commandArgs)) {
+                                continue;
+                            }
+
+                            startedAny = true;
+                            if (WaitForFoobarRestored(candidatePath)) {
+                                return new ProcessLaunchResult(ProcessLaunchOutcome.RestoredExistingWindow);
+                            }
+                        }
+                    }
+
+                    return new ProcessLaunchResult(
+                        ProcessLaunchOutcome.FoobarRestoreFailed,
+                        "Could not restore Foobar2000 from tray/minimized state using /show and the /command fallback."
+                    );
+                }
+
+                return startedAny
+                    ? new ProcessLaunchResult(ProcessLaunchOutcome.LaunchedNewProcess)
+                    : new ProcessLaunchResult(
+                        ProcessLaunchOutcome.FoobarRestoreFailed,
+                        "Could not start Foobar2000 using /show."
+                    );
             }
 
             var existing = TryRestoreExistingWindow(fullPath);
@@ -68,7 +125,7 @@ public sealed class ProcessLauncher : IProcessLauncher {
                 return ExistingProcessState.None;
             }
 
-            var hasMatchingProcessWithoutWindow = false;
+            var hasMatchingProcess = false;
             foreach (var process in Process.GetProcessesByName(processName)) {
                 try {
                     var modulePath = process.MainModule?.FileName;
@@ -76,21 +133,19 @@ public sealed class ProcessLauncher : IProcessLauncher {
                         continue;
                     }
 
+                    hasMatchingProcess = true;
+
+                    // Fast path: try the process-reported main window first.
                     var handle = process.MainWindowHandle;
-                    if (handle == IntPtr.Zero) {
-                        hasMatchingProcessWithoutWindow = true;
-                        continue;
+                    if (handle != IntPtr.Zero && AttemptRestoreWindow(handle)) {
+                        return ExistingProcessState.RestoredExistingWindow;
                     }
 
-                    if (IsIconic(handle)) {
-                        ShowWindow(handle, SwRestore);
+                    // Tray-minimized state can result in MainWindowHandle==0, but the process
+                    // still owns one or more top-level windows that we can enumerate.
+                    if (RestoreTopLevelWindowsForProcess((uint)process.Id)) {
+                        return ExistingProcessState.RestoredExistingWindow;
                     }
-                    else {
-                        ShowWindow(handle, SwShow);
-                    }
-
-                    SetForegroundWindow(handle);
-                    return ExistingProcessState.RestoredExistingWindow;
                 }
                 catch {
                     // Ignore protected or inaccessible process details.
@@ -100,7 +155,7 @@ public sealed class ProcessLauncher : IProcessLauncher {
                 }
             }
 
-            if (hasMatchingProcessWithoutWindow) {
+            if (hasMatchingProcess) {
                 return ExistingProcessState.RunningWithoutWindow;
             }
         }
@@ -109,6 +164,149 @@ public sealed class ProcessLauncher : IProcessLauncher {
         }
 
         return ExistingProcessState.None;
+    }
+
+    private static bool HasAnyMatchingProcessWithoutWindow(string fullPath) {
+        try {
+            var processName = Path.GetFileNameWithoutExtension(fullPath);
+            if (string.IsNullOrWhiteSpace(processName)) {
+                return false;
+            }
+
+            foreach (var process in Process.GetProcessesByName(processName)) {
+                try {
+                    if (process.MainWindowHandle == IntPtr.Zero) {
+                        return true;
+                    }
+                }
+                catch {
+                    // Ignore protected or inaccessible process details.
+                }
+                finally {
+                    process.Dispose();
+                }
+            }
+        }
+        catch {
+            // If detection fails, caller will treat it as a normal launch attempt.
+        }
+
+        return false;
+    }
+
+    private static bool AttemptRestoreWindow(IntPtr handle) {
+        if (IsIconic(handle)) {
+            ShowWindow(handle, SwRestore);
+        }
+        else {
+            ShowWindow(handle, SwShow);
+        }
+
+        SetForegroundWindow(handle);
+        // For "minimise to tray/icon" states, we only want to count this as restored if
+        // the window actually becomes visible (otherwise caller will fall back to /show).
+        return !IsIconic(handle) && IsWindowVisible(handle);
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    private static bool RestoreTopLevelWindowsForProcess(uint processId) {
+        var anyRestored = false;
+
+        EnumWindowsProc callback = (hWnd, _) => {
+            uint windowProcessId;
+            GetWindowThreadProcessId(hWnd, out windowProcessId);
+            if (windowProcessId != processId) {
+                return true;
+            }
+
+            if (IsIconic(hWnd)) {
+                ShowWindow(hWnd, SwRestore);
+            }
+            else {
+                ShowWindow(hWnd, SwShow);
+            }
+
+            SetForegroundWindow(hWnd);
+
+            if (!IsIconic(hWnd) && IsWindowVisible(hWnd)) {
+                anyRestored = true;
+                return false; // stop enumeration once we restore at least one window
+            }
+
+            return true;
+        };
+
+        EnumWindows(callback, IntPtr.Zero);
+        return anyRestored;
+    }
+
+    private static bool IsFoobar2000Executable(string fullPath) {
+        try {
+            var fileName = Path.GetFileName(fullPath);
+            return string.Equals(fileName, "foobar2000.exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch {
+            return false;
+        }
+    }
+
+    private static string[] GetCandidateExecutablePaths(string requestedFullPath) {
+        var processName = Path.GetFileNameWithoutExtension(requestedFullPath);
+        var candidates = new System.Collections.Generic.List<string>();
+        var seenPaths = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try {
+            if (!string.IsNullOrWhiteSpace(processName)) {
+                foreach (var process in Process.GetProcessesByName(processName)) {
+                    try {
+                        var modulePath = process.MainModule?.FileName;
+                        if (!string.IsNullOrWhiteSpace(modulePath) && seenPaths.Add(modulePath)) {
+                            candidates.Add(modulePath);
+                        }
+                    }
+                    catch {
+                        // Ignore protected or inaccessible process details.
+                    }
+                    finally {
+                        process.Dispose();
+                    }
+                }
+            }
+        }
+        catch {
+            // If enumeration fails, we still fall back to the requestedFullPath candidate below.
+        }
+
+        if (seenPaths.Add(requestedFullPath)) {
+            candidates.Add(requestedFullPath);
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static bool TryStartProcess(string exePath, string arguments) {
+        try {
+            var started = Process.Start(new ProcessStartInfo(exePath, arguments) { UseShellExecute = true });
+            started?.Dispose();
+            return started != null;
+        }
+        catch {
+            return false;
+        }
+    }
+
+    private static bool WaitForFoobarRestored(string exePath) {
+        for (var attempt = 0; attempt < FoobarRestoreVerifyAttempts; attempt++) {
+            var restored = TryRestoreExistingWindow(exePath);
+            if (restored == ExistingProcessState.RestoredExistingWindow) {
+                return true;
+            }
+
+            System.Threading.Thread.Sleep(FoobarRestoreVerifyDelayMs);
+        }
+
+        return false;
     }
 
     private enum ExistingProcessState {
@@ -125,13 +323,22 @@ public sealed class ProcessLauncher : IProcessLauncher {
 
     [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }
 
 public sealed class StartupManager : IStartupManager {
     private const string RegistryRunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RegistryApprovedKey =
         @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
-    private const string AppName = "TaskbarMediaControls";
+    private const string AppName = "TaskbarMediaControls-plus";
 
     public bool StartupEntryExists() {
         try {

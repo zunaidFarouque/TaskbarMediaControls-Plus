@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>TaskbarMediaControlsPlus</AssemblyName>
+    <Product>TaskbarMediaControls-plus</Product>
+    <Title>TaskbarMediaControls-plus</Title>
   </PropertyGroup>
 
   <ItemGroup>

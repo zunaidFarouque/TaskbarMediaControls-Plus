@@ -2,11 +2,11 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 ; Non-commercial use only
 
-#define MyAppName "Taskbar Media Controls"
+#define MyAppName "TaskbarMediaControls-plus"
 #define MyAppVersion "1.0"
-#define MyAppPublisher "2late"
-#define MyAppURL "https://2late.org"
-#define MyAppExeName "TaskbarMediaControls.exe"
+#define MyAppPublisher "Zunaid Farouque"
+#define MyAppURL "https://github.com/zunaidFarouque/TaskbarMediaControls-plus"
+#define MyAppExeName "TaskbarMediaControlsPlus.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -33,8 +33,8 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir=C:\Files\VSProjects\TaskbarMediaControls\bin\Release
-OutputBaseFilename=TaskbarMediaControlsSetup
+OutputDir=.\bin\Release
+OutputBaseFilename=TaskbarMediaControlsPlusSetup
 SolidCompression=yes
 WizardStyle=modern dynamic
 
@@ -45,11 +45,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Files\VSProjects\TaskbarMediaControls\bin\Release\net8.0-windows\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Files\VSProjects\TaskbarMediaControls\bin\Release\net8.0-windows\publish\TaskbarMediaControls.deps.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Files\VSProjects\TaskbarMediaControls\bin\Release\net8.0-windows\publish\TaskbarMediaControls.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Files\VSProjects\TaskbarMediaControls\bin\Release\net8.0-windows\publish\TaskbarMediaControls.pdb"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Files\VSProjects\TaskbarMediaControls\bin\Release\net8.0-windows\publish\TaskbarMediaControls.runtimeconfig.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\bin\Release\net8.0-windows10.0.19041.0\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\bin\Release\net8.0-windows10.0.19041.0\publish\TaskbarMediaControlsPlus.deps.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\bin\Release\net8.0-windows10.0.19041.0\publish\TaskbarMediaControlsPlus.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\bin\Release\net8.0-windows10.0.19041.0\publish\TaskbarMediaControlsPlus.pdb"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\bin\Release\net8.0-windows10.0.19041.0\publish\TaskbarMediaControlsPlus.runtimeconfig.json"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

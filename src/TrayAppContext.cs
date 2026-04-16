@@ -272,10 +272,17 @@ public class TrayAppContext : ApplicationContext {
     private void OpenCurrentMediaAppOrFallback() {
         var sourcePath = _currentMediaInfo.SourceProcessPath;
         if (IsValidExecutablePath(sourcePath)) {
+            var matchesFallbackPath = IsFallbackExecutablePath(sourcePath);
+            var avoidDuplicate = TrayFeatureLogic.ShouldAvoidDuplicateWhenRunningWithoutWindow(
+                _settings,
+                sourcePath,
+                matchesFallbackPath
+            );
+            var resolvedPlayerType = TrayFeatureLogic.ResolveLaunchPlayerType(_settings, sourcePath, matchesFallbackPath);
             TryLaunchPath(
                 sourcePath,
-                avoidDuplicateWhenRunningWithoutWindow: IsFallbackExecutablePath(sourcePath),
-                playerType: IsFallbackExecutablePath(sourcePath) ? _settings.FallbackPlayerType : FallbackPlayerType.Other,
+                avoidDuplicateWhenRunningWithoutWindow: avoidDuplicate,
+                playerType: resolvedPlayerType,
                 operationDescription: "open current media application"
             );
             return;
@@ -307,10 +314,17 @@ public class TrayAppContext : ApplicationContext {
 
         switch (action) {
             case FallbackOpenAction.OpenMediaSource:
+                var matchesFallbackPath = IsFallbackExecutablePath(sourcePath);
+                var avoidDuplicate = TrayFeatureLogic.ShouldAvoidDuplicateWhenRunningWithoutWindow(
+                    _settings,
+                    sourcePath,
+                    matchesFallbackPath
+                );
+                var resolvedPlayerType = TrayFeatureLogic.ResolveLaunchPlayerType(_settings, sourcePath, matchesFallbackPath);
                 TryLaunchPath(
                     sourcePath,
-                    avoidDuplicateWhenRunningWithoutWindow: IsFallbackExecutablePath(sourcePath),
-                    playerType: IsFallbackExecutablePath(sourcePath) ? _settings.FallbackPlayerType : FallbackPlayerType.Other,
+                    avoidDuplicateWhenRunningWithoutWindow: avoidDuplicate,
+                    playerType: resolvedPlayerType,
                     operationDescription: "open current media application"
                 );
                 return;

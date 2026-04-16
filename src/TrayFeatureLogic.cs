@@ -104,12 +104,55 @@ public static class TrayFeatureLogic {
         return hasValidFallbackPath ? FallbackOpenAction.OpenFallback : FallbackOpenAction.None;
     }
 
+    public static FallbackPlayerType ResolveLaunchPlayerType(
+        AppSettings settings,
+        string? launchPath,
+        bool matchesConfiguredFallbackPath
+    ) {
+        if (matchesConfiguredFallbackPath) {
+            return settings.FallbackPlayerType;
+        }
+
+        if (settings.FallbackPlayerType == FallbackPlayerType.Foobar &&
+            IsFoobarExecutablePath(launchPath)) {
+            return FallbackPlayerType.Foobar;
+        }
+
+        return FallbackPlayerType.Other;
+    }
+
+    public static bool ShouldAvoidDuplicateWhenRunningWithoutWindow(
+        AppSettings settings,
+        string? launchPath,
+        bool matchesConfiguredFallbackPath
+    ) {
+        if (matchesConfiguredFallbackPath) {
+            return true;
+        }
+
+        return settings.FallbackPlayerType == FallbackPlayerType.Foobar &&
+               IsFoobarExecutablePath(launchPath);
+    }
+
+    public static bool IsFoobarExecutablePath(string? path) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return false;
+        }
+
+        try {
+            return string.Equals(Path.GetFileName(path), "foobar2000.exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch {
+            return false;
+        }
+    }
+
     public static string BuildProcessLaunchErrorMessage(ProcessLaunchResult result, string operationDescription) {
         return result.Outcome switch {
             ProcessLaunchOutcome.RunningWithoutWindow =>
                 "The fallback app is running in the background but has no restorable window.",
             ProcessLaunchOutcome.FoobarRestoreFailed =>
-                "Could not restore Foobar2000 from tray/minimized state.",
+                "Could not restore Foobar2000 from tray/minimized state after trying /show and the /command fallback.",
             ProcessLaunchOutcome.InvalidPath =>
                 $"{operationDescription} failed because the executable path is invalid.",
             ProcessLaunchOutcome.Failed when !string.IsNullOrWhiteSpace(result.ErrorMessage) =>

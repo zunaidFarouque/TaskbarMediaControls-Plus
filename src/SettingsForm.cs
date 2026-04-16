@@ -28,7 +28,7 @@ public sealed class SettingsForm : Form {
         UpdatedSettings = SettingsModelLogic.Clone(settings);
         LaunchOnStartupEnabled = launchOnStartupEnabled;
 
-        Text = "TaskbarMediaControls Settings";
+        Text = "TaskbarMediaControls-plus Settings";
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = false;

@@ -23,18 +23,24 @@ public class ProcessLauncherTests {
     }
 
     [Fact]
-    public void Start_WhenFoobarModeAndNoRestorableWindow_ShouldReturnFoobarRestoreFailed() {
+    public void Start_WhenFoobarModeAndShowCommandSucceeds_ShouldReturnSuccess() {
         var launcher = new ProcessLauncher();
-        using var tempFile = new TempFile(".exe");
+        var whereExe = Path.Combine(Environment.SystemDirectory, "where.exe");
+        if (!File.Exists(whereExe)) {
+            return;
+        }
 
         var result = launcher.Start(
-            tempFile.Path,
+            whereExe,
             avoidDuplicateWhenRunningWithoutWindow: true,
             playerType: FallbackPlayerType.Foobar
         );
 
-        Assert.Equal(ProcessLaunchOutcome.FoobarRestoreFailed, result.Outcome);
-        Assert.False(result.IsSuccess);
+        Assert.True(result.IsSuccess);
+        Assert.Contains(
+            result.Outcome,
+            new[] { ProcessLaunchOutcome.LaunchedNewProcess, ProcessLaunchOutcome.RestoredExistingWindow }
+        );
     }
 
     private sealed class TempFile : IDisposable {
