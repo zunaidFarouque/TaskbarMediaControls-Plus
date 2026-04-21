@@ -1,12 +1,12 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Windows tray media controls (plus fork) with improved fallback app handling.",
   "homepage": "https://github.com/zunaidFarouque/TaskbarMediaControls-Plus",
   "license": "Apache-2.0",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/zunaidFarouque/TaskbarMediaControls-Plus/releases/download/v1.0.3/TaskbarMediaControls-Plus-v1.0.3-portable.zip",
-      "hash": "4b21a6630be8641bd4d0763d290e96b339051a94e7eb6ad395b988cd7035b4c5"
+      "url": "https://github.com/zunaidFarouque/TaskbarMediaControls-Plus/releases/download/v1.0.4/TaskbarMediaControls-Plus-v1.0.4-portable.zip",
+      "hash": "4d2cb9f70a55cb9976c4ca18968e7d6bc1fb6b2fd1e21266ecda31226c862b45"
     }
   },
   "depends": "dotnet-runtime",
