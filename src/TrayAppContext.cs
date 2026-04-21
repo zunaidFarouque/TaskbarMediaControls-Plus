@@ -14,6 +14,7 @@ public class TrayAppContext : ApplicationContext {
     private readonly IStartupManager _startupManager;
     private readonly SynchronizationContext? _uiContext;
     private readonly System.Windows.Forms.Timer[] _singleClickTimers = new System.Windows.Forms.Timer[3];
+    private readonly bool[] _suppressNextSingleClick = new bool[3];
     private readonly IconType?[] _appliedIconTypes = new IconType?[3];
 #if DEBUG
     private readonly System.Windows.Forms.Timer _memoryDiagnosticsTimer = new() { Interval = 60_000 };
@@ -78,6 +79,7 @@ public class TrayAppContext : ApplicationContext {
     }
 
     private NotifyIcon CreateNotifyIcon(IconType iconType, string tooltip, int index) {
+        var singleClickInterval = TrayFeatureLogic.ResolveSingleClickDelayMs(SystemInformation.DoubleClickTime);
         var icon = new NotifyIcon {
             Icon = IconManager.LoadIcon(iconType),
             Text = tooltip,
@@ -85,9 +87,14 @@ public class TrayAppContext : ApplicationContext {
             ContextMenuStrip = _trayMenu
         };
 
-        _singleClickTimers[index] = new System.Windows.Forms.Timer { Interval = 250 };
+        _singleClickTimers[index] = new System.Windows.Forms.Timer { Interval = singleClickInterval };
         _singleClickTimers[index].Tick += (_, _) => {
             _singleClickTimers[index].Stop();
+            if (_suppressNextSingleClick[index]) {
+                _suppressNextSingleClick[index] = false;
+                return;
+            }
+
             ExecuteClickAction(GetSingleClickAction(index));
         };
 
@@ -102,6 +109,11 @@ public class TrayAppContext : ApplicationContext {
                 return;
             }
 
+            if (_suppressNextSingleClick[index]) {
+                _suppressNextSingleClick[index] = false;
+                return;
+            }
+
             ShowPressedFeedback(index);
             _singleClickTimers[index].Stop();
             _singleClickTimers[index].Start();
@@ -112,6 +124,7 @@ public class TrayAppContext : ApplicationContext {
                 return;
             }
 
+            _suppressNextSingleClick[index] = true;
             _singleClickTimers[index].Stop();
             ExecuteClickAction(GetDoubleClickAction(index));
         };

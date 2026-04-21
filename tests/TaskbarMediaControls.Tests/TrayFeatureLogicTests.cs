@@ -137,6 +137,15 @@ public class TrayFeatureLogicTests {
         Assert.Equal(ClickAction.NextTrack, TrayFeatureLogic.GetSingleClickAction(settings, 2));
     }
 
+    [Theory]
+    [InlineData(200, 250)]
+    [InlineData(500, 500)]
+    [InlineData(1200, 1000)]
+    public void ResolveSingleClickDelayMs_ShouldClampToSupportedRange(int systemDoubleClickTime, int expectedDelay) {
+        var resolvedDelay = TrayFeatureLogic.ResolveSingleClickDelayMs(systemDoubleClickTime);
+        Assert.Equal(expectedDelay, resolvedDelay);
+    }
+
     [Fact]
     public void ShouldOpenCurrentMediaAppBeforeFallback_ShouldBeTrueForDefaultWithActiveSession() {
         var settings = new AppSettings();

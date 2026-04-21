@@ -82,6 +82,10 @@ public static class TrayFeatureLogic {
         };
     }
 
+    public static int ResolveSingleClickDelayMs(int systemDoubleClickTime) {
+        return Math.Clamp(systemDoubleClickTime, 250, 1000);
+    }
+
     public static bool[] GetIconVisibilities(AppSettings settings) {
         return [settings.PreviousIcon.Visible, settings.PlayPauseIcon.Visible, settings.NextIcon.Visible];
     }
